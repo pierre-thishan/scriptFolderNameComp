@@ -1,7 +1,0 @@
-Mismatched Files Report
-==============================
-/home/pierreubu/Desktop/WorkPLG/test_files/95F4kgzO.txt
-/home/pierreubu/Desktop/WorkPLG/test_files/VIAbS3QQ.txt
-/home/pierreubu/Desktop/WorkPLG/test_files/subdir_1/y8MV6iFl.txt
-/home/pierreubu/Desktop/WorkPLG/test_files/subdir_2/wMFnp2KT.txt
-/home/pierreubu/Desktop/WorkPLG/test_files/subdir_2/U5oa8XRe.txt

@@ -1,0 +1,7 @@
+Updated Golden List
+==============================
+analog.file1.txt
+analog_file2.txt
+file3.txt
+golden_file1.txt
+golden_file2.txt
