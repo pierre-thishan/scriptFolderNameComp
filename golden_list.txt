@@ -1,5 +1,5 @@
 <as>.file1.txt
-<>_file2.txt
+<lol>_file2.txt
 file3.txt
 golden_file1.txt
 golden_file2.txt
