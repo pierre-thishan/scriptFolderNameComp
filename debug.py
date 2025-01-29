@@ -32,27 +32,46 @@ def save_pvte_combinations(output_file="pvte_combinations.txt"):
             f.write(combo + "\n")
     print(f"PVTE combinations saved to: {os.path.abspath(output_file)}")
 
-def generate_directory_file_report(directory, output_file):
+def update_golden_list_with_modes(golden_list_path, soc_block_name, user_modes, debug_file):
     """
-    Generates a report of all file names in the target directory and subdirectories,
-    ignoring files that start with a dot (e.g., `.SYNC`, `.swp`).
+    Updates the golden list by replacing `<anamix>` with SOC block name
+    and `<mode>` with default or user-provided modes, and `<MODE>` with PVTE modes.
     """
-    file_list = []
-    for root, dirs, files in os.walk(directory):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"tool_data", "STUB"}]
-        for file_name in files:
-            if not file_name.startswith("."):  # Ignore dot files
-                absolute_path = os.path.abspath(os.path.join(root, file_name))
-                file_list.append(absolute_path)
+    mode_list = DEFAULT_MODES.union(user_modes) if user_modes else DEFAULT_MODES
+    pvte_combinations = get_pvte_combinations()
+    updated_list = set()
     
-    with open(output_file, 'w') as f:
-        f.write(f"Directory File List Report ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
-        f.write("=" * 50 + "\n")
-        for file_path in sorted(file_list):
-            f.write(file_path + "\n")
+    with open(golden_list_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if "<anamix>" in line:
+                updated_line = line.replace("<anamix>", soc_block_name)
+                if "<mode>" in updated_line:
+                    for mode in mode_list:
+                        updated_list.add(updated_line.replace("<mode>", mode))
+                elif "<MODE>" in updated_line:
+                    for pvte in pvte_combinations:
+                        updated_list.add(updated_line.replace("<MODE>", pvte))
+                else:
+                    updated_list.add(updated_line)
+            else:
+                if "<mode>" in line:
+                    for mode in mode_list:
+                        updated_list.add(line.replace("<mode>", mode))
+                elif "<MODE>" in line:
+                    for pvte in pvte_combinations:
+                        updated_list.add(line.replace("<MODE>", pvte))
+                else:
+                    updated_list.add(line)
     
-    print(f"Directory file list report saved to: {os.path.abspath(output_file)}")
-    return file_list
+    with open(debug_file, 'w') as debug_f:
+        debug_f.write(f"Updated Golden List with Modes ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
+        debug_f.write("=" * 50 + "\n")
+        for item in sorted(updated_list):
+            debug_f.write(item + "\n")
+    
+    print(f"Updated golden list saved to: {os.path.abspath(debug_file)}")
+    return updated_list
 
 def find_matches_and_mismatches(directory_file_list, updated_golden_list):
     """
@@ -102,7 +121,10 @@ def main():
     soc_block_name = input("Enter the SOC block name: ").strip()
     directory = input("Enter the directory to scan: ").strip()
     golden_list_file = input("Enter the path to the golden list file: ").strip()
+    additional_modes = input("Enter additional modes (comma-separated) or press Enter to skip: ").strip()
     include_mismatch_locations = input("Include file paths for mismatches? (yes/no): ").strip().lower() == 'yes'
+    
+    user_modes = {mode.strip() for mode in additional_modes.split(',') if mode.strip()} if additional_modes else None
     
     if not os.path.isdir(directory):
         print(f"Error: Directory '{directory}' does not exist.")
@@ -114,7 +136,8 @@ def main():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     save_pvte_combinations()  # Save PVTE combinations for debugging
     directory_file_list = generate_directory_file_report(directory, f"directory_file_list_{timestamp}.txt")
-    matches, missing_in_target, extra_in_target = find_matches_and_mismatches(directory_file_list, [])
+    updated_golden_list = update_golden_list_with_modes(golden_list_file, soc_block_name, user_modes, f"updated_golden_list_{timestamp}.txt")
+    matches, missing_in_target, extra_in_target = find_matches_and_mismatches(directory_file_list, updated_golden_list)
     write_report(matches, missing_in_target, extra_in_target, directory_file_list, include_mismatch_locations, f"file_comparison_report_{timestamp}.txt")
 
 if __name__ == "__main__":
