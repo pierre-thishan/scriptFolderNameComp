@@ -2,18 +2,35 @@ import os
 from datetime import datetime
 from itertools import product
 
-DEFAULT_MODES = {"Matpg_stuckat", "Matpg_atspeed", "Matpg_shift", "Mfunc"}  # Default PVT Modes
+# Default modes that only replace <mode> in the golden list
+DEFAULT_MODES = {"FUNC", "ATPG_SHIFT", "ATPG_STUCKAT", "ATPG_ATSPEED"}
+
+# PVTE-specific modes that replace <MODE> in the golden list
+PVTE_MODES = {"Matpg_stuckat", "Matpg_atspeed", "Matpg_shift", "Mfunc"}
+
 default_p = {"Ptt", "Pssgnp", "Pffgnp"}
-default_v = ["V0675", "V0720", "V0750", "V0770", "V0825", "V1050", "V1160"]  # Sorted manually in ascending order  # Sorted voltages in ascending order
+default_v = ["V0675", "V0720", "V0750", "V0770", "V0825", "V1050", "V1160"]  # Sorted manually
 default_t = {"T125", "Tm40", "T025"}
 default_e = {"Ecworst_CCworst_T", "Ecworst_CCworst", "Ercworst_CCworst", "Ercworst_CCworst_T", "Etypical", "Ecbest_CCbest", "Ercbest_CCbest"}
 
-def get_pvte_combinations(p_set, v_set, t_set, e_set, mode_set):
+def get_pvte_combinations():
     """
     Generates all possible PVTE and Mode combinations while maintaining the fixed order.
     """
     return ["{}_{}_{}_{}_{}".format(p, v, t, e, mode)
-            for p, v, t, e, mode in product(p_set, v_set, t_set, e_set, mode_set)]
+            for p, v, t, e, mode in product(default_p, default_v, default_t, default_e, PVTE_MODES)]
+
+def save_pvte_combinations(output_file="pvte_combinations.txt"):
+    """
+    Saves the generated PVTE combinations to a file for debugging purposes.
+    """
+    pvte_combinations = get_pvte_combinations()
+    with open(output_file, 'w') as f:
+        f.write("Generated PVTE Combinations\n")
+        f.write("=" * 50 + "\n")
+        for combo in pvte_combinations:
+            f.write(combo + "\n")
+    print(f"PVTE combinations saved to: {os.path.abspath(output_file)}")
 
 def generate_directory_file_report(directory, output_file):
     """
@@ -95,6 +112,7 @@ def main():
         return
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    save_pvte_combinations()  # Save PVTE combinations for debugging
     directory_file_list = generate_directory_file_report(directory, f"directory_file_list_{timestamp}.txt")
     matches, missing_in_target, extra_in_target = find_matches_and_mismatches(directory_file_list, [])
     write_report(matches, missing_in_target, extra_in_target, directory_file_list, include_mismatch_locations, f"file_comparison_report_{timestamp}.txt")
