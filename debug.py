@@ -1,57 +1,77 @@
 import os
 from datetime import datetime
+from itertools import product
 
-DEFAULT_MODES = {"FUNC", "ATPG_SHIFT", "ATPG_STUCKAT", "ATPG_ATSPEED"}  # Users can input more modes.
+DEFAULT_MODES = {"Matpg_stuckat", "Matpg_atspeed", "Matpg_shift", "Mfunc"}  # Default PVT Modes
+DEFAULT_P = {"Ptt", "Pssgnp", "Pffgnp"}
+DEFAULT_V = {"V0675", "V0720", "V0750", "V0770", "V0825", "V1050", "V1160"}  # Sorted voltages in ascending order
+DEFAULT_T = {"T125", "Tm40", "T025"}
+DEFAULT_E = {"Ecworst_CCworst_T", "Ecworst_CCworst", "Ercworst_CCworst", "Ercworst_CCworst_T", "Etypical", "Ecbest_CCbest", "Ercbest_CCbest"}
 
-def generate_directory_file_report(directory, output_file):
+def get_pvte_combinations():
     """
-    Generates a report of all file names in the target directory and subdirectories,
-    ignoring files that start with a dot (e.g., `.SYNC`, `.swp`).
+    Generates all possible PVTE and Mode combinations while maintaining the fixed order.
     """
-    file_list = []
-    for root, dirs, files in os.walk(directory):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"tool_data", "STUB"}]
-        for file_name in files:
-            if not file_name.startswith("."):  # Ignore dot files
-                absolute_path = os.path.abspath(os.path.join(root, file_name))
-                file_list.append(absolute_path)
-    
+    return ["{}_{}_{}_{}_{}".format(p, v, t, e, mode)
+            for p, v, t, e, mode in product(DEFAULT_P, DEFAULT_V, DEFAULT_T, DEFAULT_E, DEFAULT_MODES)]
+
+def save_pvte_combinations_to_file(output_file="pvte_combinations.txt"):
+    """
+    Saves the generated PVTE combinations to a file for debugging purposes.
+    """
+    pvte_combinations = get_pvte_combinations()
     with open(output_file, 'w') as f:
-        f.write(f"Directory File List Report ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
+        f.write("Generated PVTE Combinations\n")
         f.write("=" * 50 + "\n")
-        for file_path in sorted(file_list):
-            f.write(file_path + "\n")
-    
-    print(f"Directory file list report saved to: {os.path.abspath(output_file)}")
-    return file_list
+        for combo in pvte_combinations:
+            f.write(combo + "\n")
+    print(f"PVTE combinations saved to: {os.path.abspath(output_file)}")
 
-def update_golden_list_with_modes(golden_list_path, soc_block_name, user_modes, debug_file):
+def prompt_pvte_options():
     """
-    Updates the golden list by replacing `<...>` with SOC block name
-    and `<mode>` with default or user-provided modes.
+    Displays available PVTE options and allows the engineer to customize selections.
     """
-    mode_list = DEFAULT_MODES.union(user_modes) if user_modes else DEFAULT_MODES
+    print("Default PVTE Options:")
+    print(f"Process (P): {DEFAULT_P}")
+    print(f"Voltage (V): {DEFAULT_V}")
+    print(f"Temperature (T): {DEFAULT_T}")
+    print(f"Environment (E): {DEFAULT_E}")
+    print(f"Modes: {DEFAULT_MODES}")
+
+    custom_choice = input("Would you like to modify these selections? (yes/no): ").strip().lower()
+    
+    if custom_choice == "yes":
+        def modify_set(name, default_set):
+            print(f"Modify {name} (current: {default_set})")
+            new_values = input("Enter comma-separated values or press Enter to keep default: ").strip()
+            return set(new_values.split(',')) if new_values else default_set
+        
+        global DEFAULT_P, DEFAULT_V, DEFAULT_T, DEFAULT_E, DEFAULT_MODES
+        DEFAULT_P = modify_set("Process (P)", DEFAULT_P)
+        DEFAULT_V = modify_set("Voltage (V)", DEFAULT_V)
+        DEFAULT_T = modify_set("Temperature (T)", DEFAULT_T)
+        DEFAULT_E = modify_set("Environment (E)", DEFAULT_E)
+        DEFAULT_MODES = modify_set("Modes", DEFAULT_MODES)
+
+def update_golden_list_with_pvte_modes(golden_list_path, soc_block_name, debug_file):
+    """
+    Updates the golden list by replacing `<anamix>` with SOC block name
+    and `<PVTE><Mode>` with all possible combinations.
+    """
+    pvte_combinations = get_pvte_combinations()
     updated_list = set()
     
     with open(golden_list_path, 'r') as f:
         for line in f:
             line = line.strip()
-            if "<anamix>" in line:
-                updated_line = line.replace(line[line.find('<'):line.find('>') + 1], soc_block_name)
-                if "<mode>" in updated_line:
-                    for mode in mode_list:
-                        updated_list.add(updated_line.replace("<mode>", mode))
-                else:
-                    updated_list.add(updated_line)
+            if "<anamix>" in line and "<PVTE><Mode>" in line:
+                for pvte in pvte_combinations:
+                    updated_list.add(line.replace("<anamix>", soc_block_name).replace("<PVTE><Mode>", pvte))
             else:
-                if "<mode>" in line:
-                    for mode in mode_list:
-                        updated_list.add(line.replace("<mode>", mode))
-                else:
-                    updated_list.add(line)
+                updated_list.add(line)
     
     with open(debug_file, 'w') as debug_f:
-        debug_f.write(f"Updated Golden List with Modes ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
+        debug_f.write(f"Updated Golden List with PVTE Modes ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
         debug_f.write("=" * 50 + "\n")
         for item in sorted(updated_list):
             debug_f.write(item + "\n")
@@ -59,71 +79,19 @@ def update_golden_list_with_modes(golden_list_path, soc_block_name, user_modes, 
     print(f"Updated golden list saved to: {os.path.abspath(debug_file)}")
     return updated_list
 
-def find_matches_and_mismatches(directory_file_list, updated_golden_list):
-    """
-    Finds both successful matches and mismatches between the directory files and the updated golden list.
-    """
-    directory_file_names = {os.path.basename(file_path) for file_path in directory_file_list}
-    golden_file_names = {os.path.basename(file) for file in updated_golden_list}
-    
-    matches = directory_file_names & golden_file_names
-    missing_in_target = golden_file_names - directory_file_names
-    extra_in_target = directory_file_names - golden_file_names
-    
-    return sorted(matches), sorted(missing_in_target), sorted(extra_in_target)
-
-def write_report(matches, missing_in_target, extra_in_target, directory_file_list, include_mismatch_locations, report_file):
-    """
-    Writes a report including the success rate, matched files, and mismatched files with optional paths.
-    """
-    total_files = len(matches) + len(missing_in_target) + len(extra_in_target)
-    success_rate = (len(matches) / total_files) * 100 if total_files > 0 else 0
-    file_paths = {os.path.basename(fp): fp for fp in directory_file_list}  # Map names to paths
-    
-    with open(report_file, 'w') as f:
-        f.write(f"File Comparison Report ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n")
-        f.write("=" * 50 + "\n\n")
-        f.write(f"Total Files Compared: {total_files}\n")
-        f.write(f"Successful Matches: {len(matches)}\n")
-        f.write(f"Missing in Target Directory: {len(missing_in_target)}\n")
-        f.write(f"Extra in Target Directory: {len(extra_in_target)}\n")
-        f.write(f"Success Rate: {success_rate:.2f}%\n\n")
-        
-        f.write("Matched Files:\n" + "-" * 50 + "\n")
-        for match in matches:
-            f.write(match + "\n")
-        
-        f.write("\nMissing in Target Directory:\n" + "-" * 50 + "\n")
-        for missing in missing_in_target:
-            f.write(f"{missing} {'(' + file_paths.get(missing, 'Path not found') + ')' if include_mismatch_locations else ''}\n")
-        
-        f.write("\nExtra in Target Directory:\n" + "-" * 50 + "\n")
-        for extra in extra_in_target:
-            f.write(f"{extra} {'(' + file_paths.get(extra, 'Path not found') + ')' if include_mismatch_locations else ''}\n")
-    
-    print(f"File comparison report saved to: {os.path.abspath(report_file)}")
-
 def main():
     soc_block_name = input("Enter the SOC block name: ").strip()
-    directory = input("Enter the directory to scan: ").strip()
     golden_list_file = input("Enter the path to the golden list file: ").strip()
-    additional_modes = input("Enter additional modes (comma-separated) or press Enter to skip: ").strip()
-    include_mismatch_locations = input("Include file paths for mismatches? (yes/no): ").strip().lower() == 'yes'
+    prompt_pvte_options()  # Prompt the engineer for PVTE modifications
     
-    user_modes = {mode.strip() for mode in additional_modes.split(',') if mode.strip()} if additional_modes else None
+    save_pvte_combinations_to_file()  # Save PVTE combinations for debugging
     
-    if not os.path.isdir(directory):
-        print(f"Error: Directory '{directory}' does not exist.")
-        return
     if not os.path.isfile(golden_list_file):
         print(f"Error: File '{golden_list_file}' does not exist.")
         return
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    directory_file_list = generate_directory_file_report(directory, f"directory_file_list_{timestamp}.txt")
-    updated_golden_list = update_golden_list_with_modes(golden_list_file, soc_block_name, user_modes, f"updated_golden_list_{timestamp}.txt")
-    matches, missing_in_target, extra_in_target = find_matches_and_mismatches(directory_file_list, updated_golden_list)
-    write_report(matches, missing_in_target, extra_in_target, directory_file_list, include_mismatch_locations, f"file_comparison_report_{timestamp}.txt")
+    updated_golden_list = update_golden_list_with_pvte_modes(golden_list_file, soc_block_name, f"updated_golden_list_{timestamp}.txt")
 
 if __name__ == "__main__":
     main()
